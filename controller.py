@@ -12,6 +12,13 @@ class VideoThread(QtCore.QThread):
 
     def __init__(self, cap):
         super().__init__()
+        self.color_ranges = {
+            'green': [(40, 40, 40), (80, 255, 255), (0, 255, 0)],
+            'red': [(160, 100, 100), (180, 255, 255), (0, 0, 255)],
+            'orange': [(10, 50, 50), (25, 255, 255), (0, 165, 255)],
+            'blue': [(100, 100, 100), (120, 255, 255), (255, 0, 0)],
+            'purple': [(120, 100, 100), (150, 255, 255), (128, 0, 128)]
+        }
         self._run_flag = True
         self.mutex = QtCore.QMutex()
         self.cap = cap
@@ -19,7 +26,28 @@ class VideoThread(QtCore.QThread):
     def run(self):
         while self._run_flag:
             img = self.cap.frame()
+            img = self.detect_colors(img)
             self.change_pixmap_signal.emit(img)
+    
+    def detect_colors(self, frame):
+        # Convert the frame from BGR to HSV color space
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        for color, ranges in self.color_ranges.items():
+            # Create a binary mask using the inRange function
+            lower, upper, rectangle_color = ranges
+            mask = cv2.inRange(hsv, numpy.array(lower), numpy.array(upper))
+
+            # Find contours in the mask
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            # Draw bounding rectangles around the detected objects
+            for contour in contours:
+                if cv2.contourArea(contour) > 750:
+                    x, y, w, h = cv2.boundingRect(contour)
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), rectangle_color, 2)
+
+        return frame
 
     def stop(self):
         with QtCore.QMutexLocker(self.mutex):
